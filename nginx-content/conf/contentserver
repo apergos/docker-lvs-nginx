@@ -1,0 +1,76 @@
+server {
+	listen   [::]:80 default;
+
+	server_name wronghostname contentserver;
+
+	root /usr/share/nginx/www;
+	index index.html index.htm;
+
+        set $new_scheme "http";
+        if ( $http_x_forwarded_proto = "https" ) {
+           set $new_scheme "https";
+        }
+
+        if ( $host = 'wronghostname' ) {
+            rewrite ^ $new_scheme://contentserver$request_uri? permanent;
+        }
+
+        # if url has redirtesting/
+        #    redirect to 'redirected' 
+        rewrite ^(/redirtesting)(.*)$  $new_scheme://redirected/redirtesting$2 permanent;
+
+	location / {
+		try_files $uri $uri/ /index.html;
+	}
+
+        # not right now, maybe put something into place later
+	#error_page 404 /404.html;
+	#error_page 500 502 503 504 /50x.html;
+	#location = /50x.html {
+	#	root /usr/share/nginx/www;
+	#}
+
+}
+
+server {
+	listen [::]:443 default_server ssl;
+
+	server_name contentserver;
+
+	root /usr/share/nginx/www;
+	index index.html index.htm;
+
+	ssl_certificate /etc/ssl/certs/contentserver.crt;
+	ssl_certificate_key /etc/ssl/private/contentserver.key;
+
+	ssl_session_timeout 5m;
+
+        # check these ciphers, we want them?
+        ssl_protocols SSLv3 TLSv1 TLSv1.1 TLSv1.2;
+        ssl_ciphers AES128-GCM-SHA256:RC4-SHA:RC4-MD5:AES128-SHA:AES256-SHA;
+        ssl_prefer_server_ciphers on;
+
+        set $new_scheme "http";
+        if ( $http_x_forwarded_proto = "https" ) {
+           set $new_scheme "https";
+        }
+
+        if ( $host = 'wronghostname' ) {
+            rewrite ^ $new_scheme://contentserver$request_uri? permanent;
+        }
+
+        # if url has redirtesting/
+        #    redirect to 'redirected' 
+        rewrite ^(/redirtesting)(.*)$  $new_scheme://redirected/redirtesting$2 permanent;
+
+	location / {
+		try_files $uri $uri/ /index.html;
+	}
+
+        # not right now, maybe put something into place later
+	#error_page 404 /404.html;
+	#error_page 500 502 503 504 /50x.html;
+	#location = /50x.html {
+	#	root /usr/share/nginx/www;
+	#}
+}

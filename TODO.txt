@@ -1,0 +1,14 @@
+lots of ip lookups for containers in these scripts, should do one per
+container per script. lazy.
+
+cleanup of /etc/hosts on dockerserver may still not work as advertised,
+best to check and maybe manually edit
+
+change logging format for nginx access logs to log more, suck less
+
+do this with a baby varnish instead of nginx proxy
+
+use a cert chain, a snake oil ca cert, have curl do cert verification
+
+requests of nonexistent urls under the docroot should really not
+send back index.html for the docroot

@@ -1,0 +1,179 @@
+ran start-containers.sh
+ran setup-certs.sh
+ran push-out-certs.sh
+
+made some changes on nginx-redir to nginx conf files, will restart nginx
+removed sites-enabled/default
+symlinked in sites-availabled/releases into sites-available
+restarted nginx: OK
+
+add some content to nginx-redir:
+/usr/share/nginx/www/redirtesting/index.html has a file explaining what requests should result
+in service from this server.
+
+to test that nginx-redir is doing what it should (serving content on
+80 and 443):
+
+curl -v -o junk -H 'Host: redirected' http://nginx-redir/
+curl -v -k -o junk -H 'Host: redirected' https://nginx-redir/
+(this skips cert verification)
+curl -v -o junk -H 'Host: redirected' http://nginx-redir/redirtesting/index.html
+curl -v -k -o junk -H 'Host: redirected' https://nginx-redir/redirtesting/index.html
+OK for all
+
+next, do the same for nginx-content
+
+curl -v -o junk -H 'Host: contentserver' http://nginx-content/index.html
+curl -v -k -o junk -H 'Host: contentserver' https://nginx-content/index.html
+OK
+
+curl -v -o junk -H 'Host: wronghostname' http://nginx-content/index.html
+curl -v -k -o junk -H 'Host: wronghostname' https://nginx-content/index.html
+
+curl -v -o junk -H 'Host: contentserver' http://nginx-content/redirtesting
+curl -v -k -o junk -H 'Host: contentserver' https://nginx-content/redirtesting
+
+curl -v -o junk -H 'Host: contentserver' http://nginx-content/redirtesting/
+curl -v -k -o junk -H 'Host: contentserver' https://nginx-content/redirtesting/
+
+curl -v -o junk -H 'Host: contentserver' http://nginx-content/redirtesting/index.html
+curl -v -k -o junk -H 'Host: contentserver' https://nginx-content/redirtesting/index.html
+
+all redirect to http? yes
+
+curl -v -k -o junk -H 'Host: wronghostname' -H 'X-Forwarded-Proto: https' http://nginx-content/index.html
+curl -v -k -o junk -H 'Host: wronghostname' -H 'X-Forwarded-Proto: https' https://nginx-content/index.html
+both redirect to https? yes!
+
+next we set up nginx-proxy similarly and test
+
+well it's running... to test?
+
+curl -v -o junk -H 'Host: wronghostname' http://nginx-proxy/index.html
+curl -v -k -o junk -H 'Host: wronghostname' https://nginx-proxy/index.html
+expect proxy to forward this along with the host header, to
+nginx-content and get a 301 to 'contentserver'
+
+curl -v -o junk -H 'Host: contentserver' http://nginx-proxy/index.html
+curl -v -k -o junk -H 'Host: contentserver' https://nginx-proxy/index.html
+expect 403
+
+curl -v -o junk http://nginx-proxy/index.html
+curl -v -k -o junk https://nginx-proxy/index.html
+expect 403
+
+and finally we try setting up the lvs-dr and the nginx-proxy hosts with
+the right config on em for that dr for that address...
+
+curl -v -o junk http://wronghostname/index.html
+curl -v -k -o junk https://wronghostname/index.html
+expect redirect to contentserver:  YES!
+
+and on lvs-dr I see
+
+root@eea3265f6d47:~# ipvsadm -l --stats
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port               Conns   InPkts  OutPkts  InBytes OutBytes
+  -> RemoteAddress:Port
+TCP  172.17.2.2:http                     2       12        0      814        0
+  -> nginx-proxy:http                    2       12        0      814        0
+TCP  172.17.2.2:https                    2       18        0     2056        0
+  -> nginx-proxy:https                   2       18        0     2056        0
+
+run curl -v -o junk http://wronghostname/index.html
+
+then...
+
+root@eea3265f6d47:~# ipvsadm -l --stats
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port               Conns   InPkts  OutPkts  InBytes OutBytes
+  -> RemoteAddress:Port
+TCP  172.17.2.2:http                     3       18        0     1221        0
+  -> nginx-proxy:http                    3       18        0     1221        0
+TCP  172.17.2.2:https                    2       18        0     2056        0
+  -> nginx-proxy:https                   2       18        0     2056        0
+
+where I can see the increase in the counters :-) :-)
+
+
+can now go check the logs on nginx-proxy, nginx-content to see what they show:
+
+nginx-proxy
+::ffff:172.17.42.1 - - [01/Apr/2014:06:51:17 +0000] "GET /index.html HTTP/1.1" 301 185 "-" "curl/7.32.0"
+::ffff:172.17.42.1 - - [01/Apr/2014:06:51:26 +0000] "GET /index.html HTTP/1.1" 301 185 "-" "curl/7.32.0"
+
+nginx-content
+::ffff:172.17.0.3 - - [01/Apr/2014:06:51:17 +0000] "GET /index.html HTTP/1.0" 301 185 "-" "curl/7.32.0"
+::ffff:172.17.0.3 - - [01/Apr/2014:06:51:26 +0000] "GET /index.html HTTP/1.0" 301 185 "-" "curl/7.32.0"
+
+hmm this logging format is crap. so little in it. woops.  could fix that up...
+
+
+[root@beefy tmp]# curl -v -k -o junk https://wronghostname/index.html
+* Adding handle: conn: 0xc0b8e0
+* Adding handle: send: 0
+* Adding handle: recv: 0
+* Curl_addHandleToPipeline: length: 1
+* - Conn 0 (0xc0b8e0) send_pipe: 1, recv_pipe: 0
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0* About to connect() to wronghostname port 443 (#0)
+*   Trying 172.17.2.2...
+* Connected to wronghostname (172.17.2.2) port 443 (#0)
+* Initializing NSS with certpath: sql:/etc/pki/nssdb
+* skipping SSL peer certificate verification
+* SSL connection using TLS_RSA_WITH_RC4_128_SHA
+* Server certificate:
+*       subject: CN=wronghostname,O=Wikimedia Foundation,L=San Francisco,ST=Calfornia,C=US
+*       start date: Μάρ 31 07:41:24 2014 GMT
+*       expire date: Μάρ 31 07:41:24 2015 GMT
+*       common name: wronghostname
+*       issuer: CN=wronghostname,O=Wikimedia Foundation,L=San Francisco,ST=Calfornia,C=US
+> GET /index.html HTTP/1.1
+> User-Agent: curl/7.32.0
+> Host: wronghostname
+> Accept: */*
+> 
+< HTTP/1.1 301 Moved Permanently
+* Server nginx/1.1.19 is not blacklisted
+< Server: nginx/1.1.19
+< Date: Tue, 01 Apr 2014 06:51:17 GMT
+< Content-Type: text/html
+< Content-Length: 185
+< Connection: keep-alive
+< Location: https://contentserver/index.html
+< 
+{ [data not shown]
+100   185  100   185    0     0   1971      0 --:--:-- --:--:-- --:--:--  1989
+* Connection #0 to host wronghostname left intact
+[root@beefy tmp]# curl -v -o junk http://wronghostname/index.html
+* Adding handle: conn: 0x193e900
+* Adding handle: send: 0
+* Adding handle: recv: 0
+* Curl_addHandleToPipeline: length: 1
+* - Conn 0 (0x193e900) send_pipe: 1, recv_pipe: 0
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0* About to connect() to wronghostname port 80 (#0)
+*   Trying 172.17.2.2...
+* Connected to wronghostname (172.17.2.2) port 80 (#0)
+> GET /index.html HTTP/1.1
+> User-Agent: curl/7.32.0
+> Host: wronghostname
+> Accept: */*
+> 
+< HTTP/1.1 301 Moved Permanently
+* Server nginx/1.1.19 is not blacklisted
+< Server: nginx/1.1.19
+< Date: Tue, 01 Apr 2014 06:51:26 GMT
+< Content-Type: text/html
+< Content-Length: 185
+< Connection: keep-alive
+< Location: http://contentserver/index.html
+< 
+{ [data not shown]
+100   185  100   185    0     0  26936      0 --:--:-- --:--:-- --:--:-- 30833
+* Connection #0 to host wronghostname left intact
+
+
+those were the two requests reflected above

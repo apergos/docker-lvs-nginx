@@ -1,0 +1,19 @@
+<html>
+<head>
+<title>Welcome to the Docker lvs/nginx testing service!</title>
+</head>
+<body bgcolor="white" text="black">
+<center><h1>Welcome to the Docker lvs/nginx testing service!</h1></center>
+
+<p>
+This is nginx-content.  If you got here you should have sent a request
+on 80 or 443 only to nginx-content for everything except the following:
+</p>
+<ul>
+<li>redirtesting/any url (80 or 443) (goes to 'redirected')
+<li>Host header wronghostname (80) (goes to 'wronghostname')</li>
+</ul>
+TBH we could see requests manually coming for wronghostname on 443 but
+in normal operation we shouldn't see them.
+</body>
+</html>

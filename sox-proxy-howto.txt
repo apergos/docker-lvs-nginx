@@ -1,0 +1,7 @@
+if I wanted to test in ff I would...
+
+  ssh -D 11111 me@dockerserver
+
+  then set up ff to manual proxy, localhost, port 11111, I think socks5 is the default
+  turn it off as soon as done because *all* refreshes etc go through there (think
+  google, fb, twitter, every other page that constantly refreshes)

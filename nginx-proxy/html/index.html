@@ -1,0 +1,16 @@
+<html>
+<head>
+<title>Welcome to the Docker lvs/nginx testing service!</title>
+</head>
+<body bgcolor="white" text="black">
+<center><h1>Welcome to the Docker lvs/nginx testing service!</h1></center>
+
+<p>
+This is nginx-proxy.  If you got here, that's a problem because this server
+actually just proxies for requests to 'wronghostname' as received from
+lvs-dr.  If you send a request directly to this host, I guess that could
+happen, in which case we should reject everything but the above requests
+(on either 80 or 443) which would be forwarded to nginx-content (contentserver).
+</p>
+</body>
+</html>
